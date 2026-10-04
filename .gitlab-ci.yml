@@ -1,6 +1,7 @@
 stages:
   - test
   - package
+  - release
 
 variables:
   BETTER_QR_CODES_NO_REGISTER: "1"
@@ -33,3 +34,24 @@ package:
     - if: $CI_COMMIT_TAG
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+publish-release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/cli:latest
+  needs:
+    - job: package
+      artifacts: true
+  variables:
+    GLAB_ENABLE_CI_AUTOLOGIN: "true"
+  script:
+    - archive="$(find dist -maxdepth 1 -name '*-pcm.zip' -print -quit)"
+    - test -n "$archive"
+    - version="${RELEASE_TAG#v}"
+    - glab release create "$RELEASE_TAG" "$archive#KiCad PCM package#package" --name "Better QR Codes $version" --notes-file CHANGELOG.md --ref "$RELEASE_TAG" --use-package-registry --no-update
+  rules:
+    - if: $CI_COMMIT_TAG
+      variables:
+        RELEASE_TAG: $CI_COMMIT_TAG
+    - if: $PUBLISH_TAG
+      variables:
+        RELEASE_TAG: $PUBLISH_TAG
