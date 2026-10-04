@@ -29,15 +29,15 @@ The project ships as a KiCad Plugin and Content Manager (PCM) ZIP. The single re
 1. Commit the prepared release and create an annotated `v<version>` tag.
 2. Push the commit and tag. The tag pipeline tests and builds the package, uploads the PCM ZIP to GitLab's generic package registry, and creates the GitLab release.
 3. Confirm that the release asset downloads successfully. Do not submit GitLab's automatic source archive as the PCM download.
-4. Using the release asset's permanent public URL, create repository metadata:
+4. Download the published PCM asset, then use that exact file and its permanent public URL to create repository metadata:
 
    ```text
-   python scripts/build_release.py --download-url https://example.com/permanent/package.zip
+   python scripts/build_release.py --download-url https://example.com/permanent/package.zip --repository-archive path/to/downloaded/package.zip
    ```
 
 5. Fork [KiCad's package metadata repository](https://gitlab.com/kicad/addons/metadata), create `packages/com.gitlab.oktkas.better-qrcodes/`, and copy the generated `*-repository-metadata.json` there as `metadata.json`. Add `resources/icon.png` and open a merge request.
 
-The metadata inside the ZIP intentionally has no `download_*` fields. The generated repository metadata adds the public URL, SHA-256, download size, and installed size required for submission. For later releases, retain previous version entries in KiCad's repository metadata and prepend the new version.
+The metadata inside the ZIP intentionally has no `download_*` fields. The generated repository metadata adds the public URL, SHA-256, download size, and installed size required for submission. Always use the downloaded release asset for this step because ZIP compression can produce different container bytes across platforms. For later releases, retain previous version entries in KiCad's repository metadata and prepend the new version.
 
 ## Acceptance checks
 

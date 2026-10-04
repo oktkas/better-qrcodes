@@ -1,6 +1,7 @@
 import hashlib
 import importlib.util
 import json
+import shutil
 import struct
 import tempfile
 import unittest
@@ -43,8 +44,12 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual((64, 64), png_size(ROOT / "resources" / "icon.png"))
 
     def test_build_is_deterministic_and_has_pcm_layout(self):
-        with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
-            archive, details = build_release.build(Path(first), "https://example.test/package.zip")
+        with (
+            tempfile.TemporaryDirectory() as first,
+            tempfile.TemporaryDirectory() as second,
+            tempfile.TemporaryDirectory() as repository_output,
+        ):
+            archive, details = build_release.build(Path(first))
             other_archive, other_details = build_release.build(Path(second))
 
             self.assertEqual(archive.read_bytes(), other_archive.read_bytes())
@@ -65,12 +70,22 @@ class ReleaseTests(unittest.TestCase):
                 embedded = json.loads(package.read("metadata.json"))
                 self.assertFalse(build_release.DOWNLOAD_FIELDS.intersection(embedded["versions"][0]))
 
-            repository_path = Path(first) / "better-qrcodes-0.1.0-repository-metadata.json"
+            published_archive = Path(first) / "published.zip"
+            shutil.copyfile(archive, published_archive)
+            with zipfile.ZipFile(published_archive, "a") as published:
+                published.comment = b"Different published container bytes"
+            build_release.build(
+                Path(repository_output),
+                "https://example.test/package.zip",
+                published_archive,
+            )
+
+            repository_path = Path(repository_output) / "better-qrcodes-0.1.0-repository-metadata.json"
             repository = json.loads(repository_path.read_text(encoding="utf-8"))
             release = repository["versions"][0]
             self.assertEqual("https://example.test/package.zip", release["download_url"])
-            self.assertEqual(details["download_sha256"], release["download_sha256"])
-            self.assertEqual(details["download_size"], release["download_size"])
+            self.assertEqual(hashlib.sha256(published_archive.read_bytes()).hexdigest(), release["download_sha256"])
+            self.assertEqual(published_archive.stat().st_size, release["download_size"])
             self.assertEqual(details["install_size"], release["install_size"])
 
 

@@ -66,14 +66,19 @@ def write_archive(destination: Path, files: list[tuple[Path, str]]) -> None:
             archive.writestr(info, source.read_bytes(), compresslevel=9)
 
 
-def release_details(archive: Path, files: list[tuple[Path, str]], metadata: dict) -> dict:
+def release_details(archive: Path, metadata: dict) -> dict:
+    with zipfile.ZipFile(archive) as package:
+        embedded = json.loads(package.read("metadata.json"))
+        install_size = sum(member.file_size for member in package.infolist())
+    if embedded["identifier"] != metadata["identifier"] or embedded["versions"] != metadata["versions"]:
+        raise ValueError("Release archive metadata does not match metadata.json")
     return {
         "identifier": metadata["identifier"],
         "version": metadata["versions"][0]["version"],
         "archive": archive.name,
         "download_sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
         "download_size": archive.stat().st_size,
-        "install_size": sum(source.stat().st_size for source, _ in files),
+        "install_size": install_size,
     }
 
 
@@ -91,7 +96,13 @@ def repository_metadata(metadata: dict, details: dict, download_url: str) -> dic
     return result
 
 
-def build(output_dir: Path, download_url: str | None = None) -> tuple[Path, dict]:
+def build(
+    output_dir: Path,
+    download_url: str | None = None,
+    repository_archive: Path | None = None,
+) -> tuple[Path, dict]:
+    if repository_archive is not None and download_url is None:
+        raise ValueError("--repository-archive requires --download-url")
     metadata = read_metadata()
     version = metadata["versions"][0]["version"]
     files = package_files()
@@ -104,14 +115,16 @@ def build(output_dir: Path, download_url: str | None = None) -> tuple[Path, dict
         archive = output_dir / archive_name
         shutil.copyfile(temporary_archive, archive)
 
-    details = release_details(archive, files, metadata)
+    details = release_details(archive, metadata)
     details_path = output_dir / f"better-qrcodes-{version}-release.json"
     details_path.write_text(json.dumps(details, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     if download_url:
+        repository_details = release_details(repository_archive or archive, metadata)
         repository_path = output_dir / f"better-qrcodes-{version}-repository-metadata.json"
         repository_path.write_text(
-            json.dumps(repository_metadata(metadata, details, download_url), indent=2, ensure_ascii=False) + "\n",
+            json.dumps(repository_metadata(metadata, repository_details, download_url), indent=2, ensure_ascii=False)
+            + "\n",
             encoding="utf-8",
         )
 
@@ -125,8 +138,14 @@ def main() -> None:
         "--download-url",
         help="also write official-repository metadata using this public archive URL",
     )
+    parser.add_argument(
+        "--repository-archive",
+        type=Path,
+        help="calculate repository metadata from this downloaded published archive",
+    )
     args = parser.parse_args()
-    archive, details = build(args.output_dir.resolve(), args.download_url)
+    repository_archive = args.repository_archive.resolve() if args.repository_archive else None
+    archive, details = build(args.output_dir.resolve(), args.download_url, repository_archive)
     print(f"Built {archive}")
     print(f"SHA-256: {details['download_sha256']}")
     print(f"Download size: {details['download_size']} bytes")
