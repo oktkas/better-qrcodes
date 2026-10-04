@@ -27,22 +27,36 @@ These features may go beyond the original QR-code specification, but are widely 
 - Plugin-owned grouped artwork that remains movable and scale-safe with KiCad tools
 - Re-editing by double-clicking a generated group or opening the plugin with it selected
 
-## Install for development
+## Install
 
-Better QR Codes currently targets KiCad 10.
+Better QR Codes requires KiCad 10.
 
-Copy the `better_qr_codes` directory into your KiCad 10 Action Plugins directory, then restart the PCB Editor. On Windows, the default destination is:
+Download the `better-qrcodes-<version>-pcm.zip` release asset. In KiCad, open **Plugin and Content Manager → Install from File**, select the ZIP, and restart the PCB Editor. Do not extract the archive first.
 
-```text
-%APPDATA%\kicad\10.0\scripting\plugins\better_qr_codes
-```
+For a manual installation, copy the `better_qr_codes` directory into your KiCad 10 user plugin directory:
 
-The Better QR Codes button will appear on the PCB Editor toolbar. Double-click an existing Better QR Codes group, or select it and open the plugin, to edit and regenerate it.
+| Platform | Directory |
+| --- | --- |
+| Windows | `%USERPROFILE%\Documents\KiCad\10.0\scripting\plugins` |
+| Linux | `~/.local/share/kicad/10.0/scripting/plugins` |
+| macOS | `~/Documents/KiCad/10.0/scripting/plugins` |
 
-Run the model tests with:
+The Better QR Codes button appears on the PCB Editor toolbar. Double-click an existing Better QR Codes group, or select it and open the plugin, to edit and regenerate it.
+
+## Development
+
+Run the tests with normal Python:
 
 ```text
 python -m unittest discover -s tests
 ```
 
-See [FEATURES.md](FEATURES.md) for the planned feature backlog.
+Run them with KiCad's Python as well to exercise the board-geometry tests. Build an installable PCM archive with:
+
+```text
+python scripts/build_release.py
+```
+
+Release artifacts are written to `dist/`. See [RELEASING.md](RELEASING.md) for the release and official KiCad repository workflow, [FEATURES.md](FEATURES.md) for the backlog, and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for bundled component and icon attribution.
+
+The Better QR Codes source code is released under the [MIT License](LICENSE). Bundled component licenses and icon attribution are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

@@ -6,3 +6,8 @@
 
 Upstream: <https://github.com/nayuki/QR-Code-generator>
 
+## Toolbar and package icon
+
+The icon is adapted from “qr” by Designer Zepeto from the Noun Project and is used under the [Creative Commons Attribution 3.0 license](https://creativecommons.org/licenses/by/3.0/).
+
+Source: <https://thenounproject.com/icon/qr-7443310/>

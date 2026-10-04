@@ -30,3 +30,7 @@ Run model tests with:
 ```text
 python -m unittest discover -s tests
 ```
+
+## Releases
+
+The single release version source is the version entry in `metadata.json`. Build the deterministic KiCad PCM archive with `python scripts/build_release.py`. The archive must contain plugin files directly under `plugins/`, a 24×24 toolbar icon there, a 64×64 PCM icon under `resources/`, and embedded metadata without `download_*` fields. Set `BETTER_QR_CODES_NO_REGISTER=1` when testing with KiCad's Python. See `RELEASING.md` for the release checklist and official repository submission flow.
