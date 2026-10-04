@@ -1,0 +1,2 @@
+"""Vendored, self-contained dependencies."""
+
