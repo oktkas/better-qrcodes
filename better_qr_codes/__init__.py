@@ -9,6 +9,7 @@ except ImportError:
     pass
 else:
     if os.environ.get("BETTER_QR_CODES_NO_REGISTER") != "1":
-        from .plugin import BetterQrCodesPlugin
+        from .plugin import BetterQrCodesPlugin, install_double_click_filter
 
         BetterQrCodesPlugin().register()
+        install_double_click_filter()

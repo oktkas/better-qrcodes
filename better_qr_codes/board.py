@@ -22,18 +22,6 @@ class EditableQr:
     center: object
 
 
-def enabled_layers(board) -> list[tuple[str, int]]:
-    """Return the enabled KiCad layers offered by the artwork layer selector."""
-    layers: list[tuple[str, int]] = []
-    for layer_id in range(int(pcbnew.PCB_LAYER_ID_COUNT)):
-        try:
-            if board.IsLayerEnabled(layer_id):
-                layers.append((str(board.GetLayerName(layer_id)), layer_id))
-        except (TypeError, RuntimeError):
-            continue
-    return layers
-
-
 def selected_editable_qr(board) -> EditableQr | None:
     """Find a Better QR Codes group from the current KiCad selection."""
     for selected in pcbnew.GetCurrentSelection():

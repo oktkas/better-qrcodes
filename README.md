@@ -14,10 +14,11 @@ These features may go beyond the original QR-code specification, but are widely 
 
 - Regular QR Code Model 2 symbols
 - Content, error-correction, layer, and physical-size controls
-- Live preview
+- Active PCB layers, shown with the current KiCad theme colors
+- Live preview using the selected layer color and PCB editor background
 - Toolbar action in KiCad's PCB Editor
 - Plugin-owned grouped artwork that remains movable and scalable with KiCad tools
-- Re-editing through the plugin when a generated group is selected
+- Re-editing by double-clicking a generated group or opening the plugin with it selected
 
 ## Install for development
 
@@ -29,7 +30,7 @@ Copy the `better_qr_codes` directory into your KiCad 10 Action Plugins directory
 %APPDATA%\kicad\10.0\scripting\plugins\better_qr_codes
 ```
 
-The Better QR Codes button will appear on the PCB Editor toolbar. Select an existing Better QR Codes group before opening the plugin to edit and regenerate it.
+The Better QR Codes button will appear on the PCB Editor toolbar. Double-click an existing Better QR Codes group, or select it and open the plugin, to edit and regenerate it.
 
 Run the model tests with:
 
