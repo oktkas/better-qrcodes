@@ -15,9 +15,13 @@ A KiCad plugin that generates customizable QR codes for PCB designs. The goal is
 
 ## Current state
 
-The first implementation targets KiCad 10 as a Python Action Plugin. It generates regular QR codes as grouped `PCB_SHAPE` artwork and stores compressed, versioned settings in the `PCB_GROUP` name so the plugin can edit and regenerate its own output. Do not replace this representation with `PCB_BARCODE`; future styling features need control over the rendered geometry.
+The first implementation targets KiCad 10 as a Python Action Plugin. It generates regular QR codes as grouped `PCB_SHAPE` artwork and stores compressed, versioned settings in the `PCB_GROUP` name so the plugin can edit and regenerate its own output. Settings include separate data/finder radii, module-based knockout margin, and knockout background radius. Finder rounding applies to the complete outer/gap/center geometry and spans the full finder size; the gap radius is a one-module inset from the outer radius so the ring stays visually constant in width. Do not replace this representation with `PCB_BARCODE`; styling features need control over the rendered geometry.
 
-The dialog reads the active KiCad PCB color theme for its preview and layer swatches. A global wx event filter routes canvas double-clicks on plugin-owned groups to the editor because custom `PCB_GENERATOR` items are not exposed by KiCad's Python API.
+The dialog reads the active KiCad PCB color theme for layer swatches and uses a fixed dark preview background for reliable contrast. Board output and preview must both use `geometry.material_polygons()` so they cannot disagree. A global wx event filter routes canvas double-clicks on plugin-owned groups to the editor because custom `PCB_GENERATOR` items are not exposed by KiCad's Python API.
+
+Complex knockout results must be fractured into simple, hole-free `PCB_SHAPE` polygons before insertion. KiCad's interactive scale tool can corrupt a complex polygon's hole contours.
+
+Updating artwork detaches old items and retains their wrappers for the KiCad process lifetime. Do not eagerly delete them: KiCad's selection tool can briefly retain native pointers after the modal dialog closes, causing access violations if those objects are destroyed.
 
 The QR encoder is the vendored MIT-licensed Project Nayuki implementation in `better_qr_codes/vendor/qrcodegen.py`. Keep its license header intact.
 

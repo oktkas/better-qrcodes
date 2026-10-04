@@ -2,10 +2,10 @@
 
 Better QR Codes is a KiCad plugin for creating more flexible, visually refined QR codes on PCB designs.
 
-Planned improvements over KiCad's native QR-code generator include:
+Improvements over KiCad's native QR-code generator include:
 
-- Rounded corners
-- Thinner graphic knockouts
+- Relative rounded corners that preserve connected modules
+- Inverted knockout artwork with 4-module, 2-module, or custom margins
 - Practical styling options that remain reliably scannable
 
 These features may go beyond the original QR-code specification, but are widely supported by modern scanners.
@@ -14,10 +14,17 @@ These features may go beyond the original QR-code specification, but are widely 
 
 - Regular QR Code Model 2 symbols
 - Content, error-correction, layer, and physical-size controls
+- Relative 0–100% corner-radius control
+- One relative finder-rounding control with a constant-width outer ring and rounded center
+- Optional knockout with margins measured in modules
+- Independently rounded knockout background corners
 - Active PCB layers, shown with the current KiCad theme colors
-- Live preview using the selected layer color and PCB editor background
+- Live preview using the selected layer color on a fixed dark PCB-style background
+- Dashed four-module quiet-zone outline in the preview
+- New codes default to 15 mm and low error correction
+- Successful settings are remembered for the next new code
 - Toolbar action in KiCad's PCB Editor
-- Plugin-owned grouped artwork that remains movable and scalable with KiCad tools
+- Plugin-owned grouped artwork that remains movable and scale-safe with KiCad tools
 - Re-editing by double-clicking a generated group or opening the plugin with it selected
 
 ## Install for development

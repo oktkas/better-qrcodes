@@ -11,6 +11,7 @@ from .appearance import available_layers, load_theme_colors
 from .board import add_qr, default_position, select_group, selected_editable_qr, update_qr
 from .dialog import BetterQrDialog
 from .model import QrSettings
+from .preferences import load_last_settings, save_last_settings
 
 
 _DOUBLE_CLICK_FILTER = None
@@ -54,16 +55,21 @@ def open_editor(*, selected_only: bool = False):
         (option.name for option in layers if option.layer_id == int(pcbnew.F_SilkS)),
         layers[0].name,
     )
-    initial = editable.settings if editable else QrSettings("https://example.com", "M", 20.0, default_layer)
+    initial = editable.settings if editable else load_last_settings(
+        default_layer,
+        {option.name for option in layers},
+    )
 
     _EDITOR_OPEN = True
-    dialog = BetterQrDialog(None, layers, theme, initial, editing=editable is not None)
+    dialog = None
     try:
+        dialog = BetterQrDialog(None, layers, theme, initial, editing=editable is not None)
         if dialog.ShowModal() != wx.ID_OK:
             return
         settings, encoded = dialog.result
     finally:
-        dialog.Destroy()
+        if dialog is not None:
+            dialog.Destroy()
         _EDITOR_OPEN = False
 
     if editable is None:
@@ -71,6 +77,7 @@ def open_editor(*, selected_only: bool = False):
     else:
         group = update_qr(board, editable, settings, encoded)
     select_group(group)
+    save_last_settings(settings)
 
 
 class BetterQrDoubleClickFilter(wx.EventFilter):
@@ -86,7 +93,6 @@ class BetterQrDoubleClickFilter(wx.EventFilter):
         size = source.GetClientSize()
         if (
             isinstance(top_level, wx.Dialog)
-            or source.GetParent() is not top_level
             or size.width < 200
             or size.height < 200
         ):

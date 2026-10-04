@@ -2,17 +2,28 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Iterable
+from dataclasses import dataclass, replace
 
 import pcbnew
 
-from .model import EncodedQr, QrSettings, dark_runs, decode_metadata, encode_metadata
+from .geometry import material_polygons
+from .model import (
+    EncodedQr,
+    QrSettings,
+    dark_runs,
+    decode_metadata,
+    encode_metadata,
+    encode_qr,
+)
 
 
 # Keep newly-created SWIG wrappers alive. KiCad 10's group member iterator only
 # restores concrete Python types after a save/reload, while loaded groups work normally.
 _LIVE_ITEMS: dict[str, list] = {}
+# KiCad's selection tool can retain native pointers briefly after a modal action
+# closes. Keep detached wrappers alive for the process lifetime so updating a
+# selected group never leaves the tool with a dangling C++ pointer.
+_RETIRED_ITEMS: list = []
 
 
 @dataclass(frozen=True)
@@ -48,15 +59,20 @@ def _editable_from_group(candidate, board) -> EditableQr | None:
         if not items:
             return None
         artwork = items[0]
-        min_x = min(min(item.GetStart().x, item.GetEnd().x) for item in items)
-        min_y = min(min(item.GetStart().y, item.GetEnd().y) for item in items)
-        max_x = max(max(item.GetStart().x, item.GetEnd().x) for item in items)
-        max_y = max(max(item.GetStart().y, item.GetEnd().y) for item in items)
-        size_mm = max(pcbnew.ToMM(max_x - min_x), pcbnew.ToMM(max_y - min_y))
+        boxes = [item.GetBoundingBox() for item in items]
+        min_x = min(box.GetLeft() for box in boxes)
+        min_y = min(box.GetTop() for box in boxes)
+        max_x = max(box.GetRight() for box in boxes)
+        max_y = max(box.GetBottom() for box in boxes)
+        geometry_size_mm = max(pcbnew.ToMM(max_x - min_x), pcbnew.ToMM(max_y - min_y))
         layer_name = str(artwork.GetLayerName())
-        settings = decode_metadata(str(candidate.GetName()), size_mm=size_mm, layer_name=layer_name)
+        settings = decode_metadata(str(candidate.GetName()), size_mm=geometry_size_mm, layer_name=layer_name)
         if settings is None:
             return None
+        if settings.knockout:
+            count = encode_qr(settings).module_count
+            symbol_size_mm = geometry_size_mm * count / (count + settings.knockout_margin_modules * 2)
+            settings = replace(settings, size_mm=symbol_size_mm)
         return EditableQr(candidate, settings, pcbnew.VECTOR2I((min_x + max_x) // 2, (min_y + max_y) // 2))
     except (AttributeError, RuntimeError, TypeError, ValueError):
         return None
@@ -86,9 +102,11 @@ def add_qr(board, settings: QrSettings, encoded: EncodedQr, position):
 def update_qr(board, editable: EditableQr, settings: QrSettings, encoded: EncodedQr):
     group = editable.group
     old_items = _group_items(board, group)
+    _clear_selection()
     group.RemoveAll()
     for item in old_items:
-        board.Delete(item)
+        board.Remove(item)
+    _RETIRED_ITEMS.extend(old_items)
 
     artwork_items = list(_make_artwork(board, settings, encoded, editable.center))
     for artwork in artwork_items:
@@ -116,26 +134,63 @@ def _make_artwork(board, settings: QrSettings, encoded: EncodedQr, center):
     count = encoded.module_count
     left = center.x - size_iu // 2
     top = center.y - size_iu // 2
+    layer = board.GetLayerID(settings.layer_name)
+
+    if settings.knockout:
+        for points in material_polygons(settings, encoded):
+            yield _polygon_artwork(board, points, left, top, size_iu, count, layer)
+        return
+
+    if settings.corner_radius_percent or settings.finder_radius_percent:
+        for points in material_polygons(settings, encoded):
+            yield _polygon_artwork(board, points, left, top, size_iu, count, layer)
+        return
 
     for row, start, end in dark_runs(encoded.modules):
-        x0 = left + round(start * size_iu / count)
-        x1 = left + round(end * size_iu / count)
-        y0 = top + round(row * size_iu / count)
-        y1 = top + round((row + 1) * size_iu / count)
-        artwork = pcbnew.PCB_SHAPE(board, pcbnew.SHAPE_T_RECT)
-        artwork.SetStart(pcbnew.VECTOR2I(x0, y0))
-        artwork.SetEnd(pcbnew.VECTOR2I(x1, y1))
-        artwork.SetFilled(True)
-        artwork.SetWidth(0)
-        artwork.SetLayer(board.GetLayerID(settings.layer_name))
-        yield artwork
+        yield _rectangle_artwork(
+            board,
+            left + round(start * size_iu / count),
+            top + round(row * size_iu / count),
+            left + round(end * size_iu / count),
+            top + round((row + 1) * size_iu / count),
+            layer,
+        )
+
+
+def _rectangle_artwork(board, x0: int, y0: int, x1: int, y1: int, layer):
+    artwork = pcbnew.PCB_SHAPE(board, pcbnew.SHAPE_T_RECT)
+    artwork.SetStart(pcbnew.VECTOR2I(x0, y0))
+    artwork.SetEnd(pcbnew.VECTOR2I(x1, y1))
+    artwork.SetFilled(True)
+    artwork.SetWidth(0)
+    artwork.SetLayer(layer)
+    return artwork
+
+
+def _polygon_artwork(board, points, left: int, top: int, size_iu: int, count: int, layer):
+    artwork = pcbnew.PCB_SHAPE(board, pcbnew.SHAPE_T_POLY)
+    artwork.SetPolyPoints([
+        pcbnew.VECTOR2I(
+            left + round(x * size_iu / count),
+            top + round(y * size_iu / count),
+        )
+        for x, y in points
+    ])
+    artwork.SetFilled(True)
+    artwork.SetWidth(0)
+    artwork.SetLayer(layer)
+    return artwork
 
 
 def select_group(group) -> None:
+    _clear_selection()
+    group.SetSelected()
+    pcbnew.Refresh()
+
+
+def _clear_selection() -> None:
     for item in pcbnew.GetCurrentSelection():
         try:
             item.ClearSelected()
-        except AttributeError:
+        except (AttributeError, RuntimeError):
             pass
-    group.SetSelected()
-    pcbnew.Refresh()

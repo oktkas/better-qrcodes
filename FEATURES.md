@@ -4,6 +4,8 @@ Planned features for future implementation. This is a backlog, not a release com
 
 ## 1. Adjustable corner radius
 
+Implemented for data modules with a relative 0–100% radius.
+
 - Set module corners anywhere from square to fully rounded.
 - Round exposed corners while keeping adjacent modules connected.
 - Configure finder-pattern styling separately from data modules.
@@ -16,6 +18,8 @@ Planned features for future implementation. This is a backlog, not a release com
 
 ## 3. Knockout
 
+Implemented with standard, thin, and custom module margins. Fabrication warnings remain planned.
+
 - Render the QR code as a negative cutout from a solid background.
 - Select the knockout margin from a menu:
   - **Standard — 4 modules (default)**
@@ -27,11 +31,16 @@ Planned features for future implementation. This is a backlog, not a release com
 
 ## 4. Independent finder-pattern styling
 
+A unified relative finder-rounding control is implemented for all three finder patterns.
+
 - Configure the three finder patterns independently from the data modules.
-- Offer square, rounded-square, and circular outer and inner shapes.
+- Round each finder's outer boundary, constant-width white gap, and center together. *(Implemented.)*
+- Allow the finder radius to span the full finder geometry, from square at 0% to circular at 100%. *(Implemented.)*
 - Keep standard finder patterns as the safe default.
 
 ## 5. Physical size and quiet zone
+
+The four-module quiet-zone boundary is implemented in the preview. Size modes and expert overrides remain planned.
 
 - Set the overall size in millimetres or set an exact module size.
 - Display the resulting QR version, module count, module size, and total footprint.
@@ -89,4 +98,3 @@ Planned features for future implementation. This is a backlog, not a release com
 - Apply one validated preset consistently across a batch.
 - Preview and validate every generated code before placement.
 - Make unique values and failures easy to identify before committing the batch to the board.
-
