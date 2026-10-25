@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Move the project to GitHub; the PCM identifier is now `com.github.oktkas.better-qrcodes`.
+- Refresh the toolbar and package icons.
+
 ## [0.1.0] - 2026-10-04
 
 Initial testing release for KiCad 10.

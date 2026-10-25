@@ -3,7 +3,7 @@
   "name": "Better QR Codes",
   "description": "Create editable PCB QR codes with rounded modules, styled finders, and configurable knockouts.",
   "description_full": "Better QR Codes is a KiCad PCB Editor action plugin for creating and re-editing QR Code Model 2 artwork. It supports physical sizing, error-correction and layer selection, rounded data modules and finder patterns, plus configurable knockout backgrounds. Styling is deliberately kept separate from QR encoding so required symbol structures remain intact.",
-  "identifier": "com.gitlab.oktkas.better-qrcodes",
+  "identifier": "com.github.oktkas.better-qrcodes",
   "type": "plugin",
   "author": {
     "name": "Ondřej Kučera",
@@ -13,9 +13,9 @@
   },
   "license": "MIT",
   "resources": {
-    "homepage": "https://gitlab.com/oktkas/better-qrcodes",
-    "repository": "https://gitlab.com/oktkas/better-qrcodes",
-    "bugtracker": "https://gitlab.com/oktkas/better-qrcodes/-/issues"
+    "homepage": "https://github.com/oktkas/better-qrcodes",
+    "repository": "https://github.com/oktkas/better-qrcodes",
+    "bugtracker": "https://github.com/oktkas/better-qrcodes/issues"
   },
   "tags": [
     "pcb",

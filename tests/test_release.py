@@ -30,7 +30,7 @@ class ReleaseTests(unittest.TestCase):
         release = metadata["versions"][0]
 
         self.assertEqual("0.1.0", release["version"])
-        self.assertEqual("com.gitlab.oktkas.better-qrcodes", metadata["identifier"])
+        self.assertEqual("com.github.oktkas.better-qrcodes", metadata["identifier"])
         self.assertEqual("Ondřej Kučera", metadata["author"]["name"])
         self.assertEqual("https://oktkas.cz/", metadata["author"]["contact"]["web"])
         self.assertEqual("MIT", metadata["license"])
