@@ -18,10 +18,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.publish_tag || github.ref }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - run: python -m unittest discover -s tests
@@ -32,7 +32,7 @@ jobs:
       image: kicad/kicad:10.0
       options: --user root
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.publish_tag || github.ref }}
       - run: python3 -m unittest discover -s tests
@@ -41,14 +41,14 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test, kicad-geometry-tests]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.publish_tag || github.ref }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - run: python scripts/build_release.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: better-qrcodes-dist
           path: dist/
@@ -63,10 +63,10 @@ jobs:
       RELEASE_TAG: ${{ inputs.publish_tag || github.ref_name }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.RELEASE_TAG }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: better-qrcodes-dist
           path: dist/
