@@ -1,9 +1,10 @@
 # Changelog
 
-## Unreleased
+## [0.1.1] - 2026-10-25
 
 - Move the project to GitHub; the PCM identifier is now `com.github.oktkas.better-qrcodes`.
 - Refresh the toolbar and package icons.
+- Mark the release stable so it is offered by default in the Plugin and Content Manager.
 
 ## [0.1.0] - 2026-10-04
 

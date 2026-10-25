@@ -29,12 +29,12 @@ class ReleaseTests(unittest.TestCase):
         metadata = build_release.read_metadata()
         release = metadata["versions"][0]
 
-        self.assertEqual("0.1.0", release["version"])
+        self.assertEqual("0.1.1", release["version"])
         self.assertEqual("com.github.oktkas.better-qrcodes", metadata["identifier"])
         self.assertEqual("Ondřej Kučera", metadata["author"]["name"])
         self.assertEqual("https://oktkas.cz/", metadata["author"]["contact"]["web"])
         self.assertEqual("MIT", metadata["license"])
-        self.assertEqual("testing", release["status"])
+        self.assertEqual("stable", release["status"])
         self.assertEqual("10.0", release["kicad_version"])
         self.assertEqual("swig", release["runtime"])
         self.assertFalse(build_release.DOWNLOAD_FIELDS.intersection(release))
@@ -80,7 +80,7 @@ class ReleaseTests(unittest.TestCase):
                 published_archive,
             )
 
-            repository_path = Path(repository_output) / "better-qrcodes-0.1.0-repository-metadata.json"
+            repository_path = Path(repository_output) / "better-qrcodes-0.1.1-repository-metadata.json"
             repository = json.loads(repository_path.read_text(encoding="utf-8"))
             release = repository["versions"][0]
             self.assertEqual("https://example.test/package.zip", release["download_url"])
