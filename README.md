@@ -15,6 +15,7 @@ These features may go beyond the original QR-code specification, but are widely 
 - Regular QR Code Model 2 symbols
 - Content, error-correction, layer, and physical-size controls
 - Relative 0–100% corner-radius control
+- Back-side layers place the code flipped, upright when viewed from below (orientation 180°, as KiCad gives any flipped footprint); switching the layer between front and back in the dialog converts the orientation like KiCad's Flip
 - One relative finder-rounding control with a constant-width outer ring and rounded center
 - Optional knockout with margins measured in modules
 - Independently rounded knockout background corners
@@ -24,8 +25,9 @@ These features may go beyond the original QR-code specification, but are widely 
 - New codes default to 15 mm and low error correction
 - Successful settings are remembered for the next new code
 - Toolbar action in KiCad's PCB Editor
-- Plugin-owned grouped artwork that remains movable and scale-safe with KiCad tools
-- Re-editing by double-clicking a generated group or opening the plugin with it selected
+- Each code is a board-only footprint (`QR1`, `QR2`, …): position, orientation and side are in KiCad's Properties panel and work with R, Move Exactly and Flip
+- Re-editing by double-clicking a code or opening the plugin with it selected; native moves, rotations and flips are kept
+- Codes made by 0.1.x (groups) are converted to footprints the first time they are edited
 
 ## Install
 
@@ -41,7 +43,7 @@ For a manual installation, copy the `better_qr_codes` directory into your KiCad 
 | Linux | `~/.local/share/kicad/10.0/scripting/plugins` |
 | macOS | `~/Documents/KiCad/10.0/scripting/plugins` |
 
-The Better QR Codes button appears on the PCB Editor toolbar. Double-click an existing Better QR Codes group, or select it and open the plugin, to edit and regenerate it.
+The Better QR Codes button appears on the PCB Editor toolbar. Double-click an existing code, or select it and open the plugin, to edit and regenerate it. Move, rotate and flip it with KiCad's normal tools or the Properties panel. Change its size in the plugin dialog.
 
 ## Development
 

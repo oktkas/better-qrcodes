@@ -21,6 +21,8 @@ class LayerOption:
     layer_id: int
     color: Rgb
     enabled: bool
+    # Back layers are built front-side and flipped, so the code mirrors.
+    back_side: bool = False
 
 
 @dataclass(frozen=True)
@@ -85,7 +87,13 @@ def available_layers(board, theme: ThemeColors | None = None) -> list[LayerOptio
             continue
         if not enabled:
             continue
-        layers.append(LayerOption(name, layer_id, _layer_color(layer_id, theme), enabled))
+        layers.append(LayerOption(
+            name,
+            layer_id,
+            _layer_color(layer_id, theme),
+            enabled,
+            bool(pcbnew.IsBackLayer(layer_id)),
+        ))
     return layers
 
 

@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pcbnew
 import wx
 
 from .appearance import available_layers, load_theme_colors
-from .board import add_qr, default_position, select_group, selected_editable_qr, update_qr
+from .board import add_qr, default_position, select_item, selected_editable_qr, update_qr
 from .dialog import BetterQrDialog
-from .model import QrSettings
+from .model import QrSettings, flipped_rotation
 from .preferences import load_last_settings, save_last_settings
 
 
@@ -55,10 +56,13 @@ def open_editor(*, selected_only: bool = False):
         (option.name for option in layers if option.layer_id == int(pcbnew.F_SilkS)),
         layers[0].name,
     )
-    initial = editable.settings if editable else load_last_settings(
-        default_layer,
-        {option.name for option in layers},
-    )
+    if editable is not None:
+        initial = editable.settings
+    else:
+        initial = load_last_settings(default_layer, {option.name for option in layers})
+        if any(option.back_side and option.name == initial.layer_name for option in layers):
+            # Upright when viewed from below, like any footprint KiCad flips.
+            initial = replace(initial, rotation_degrees=flipped_rotation(0.0))
 
     _EDITOR_OPEN = True
     dialog = None
@@ -73,15 +77,16 @@ def open_editor(*, selected_only: bool = False):
         _EDITOR_OPEN = False
 
     if editable is None:
-        group = add_qr(board, settings, encoded, default_position(board))
+        item = add_qr(board, settings, encoded, default_position(board))
     else:
-        group = update_qr(board, editable, settings, encoded)
-    select_group(group)
+        item = update_qr(board, editable, settings, encoded)
+    select_item(item)
     save_last_settings(settings)
 
 
 class BetterQrDoubleClickFilter(wx.EventFilter):
-    """Route double-clicks on plugin-owned groups to their editor."""
+    """Route double-clicks on plugin-owned QR footprints (and legacy groups) to
+    the plugin editor instead of KiCad's footprint properties dialog."""
 
     def FilterEvent(self, event):
         if event.GetEventType() != wx.EVT_LEFT_DCLICK.typeId or _EDITOR_OPEN:

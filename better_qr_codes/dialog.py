@@ -14,6 +14,8 @@ from .model import (
     QrSettings,
     QrSettingsError,
     encode_qr,
+    flipped_rotation,
+    place_polygons,
 )
 
 
@@ -37,6 +39,7 @@ class QrPreview(wx.Panel):
         self._encoded: EncodedQr | None = None
         self._settings: QrSettings | None = None
         self._polygons: tuple[tuple[tuple[float, float], ...], ...] = ()
+        self._back_side = False
         self._span_cache: dict[tuple[int, int], tuple[tuple[int, int, int], ...]] = {}
         self._module_color = (255, 255, 255)
         self._background = (32, 35, 40)
@@ -48,15 +51,24 @@ class QrPreview(wx.Panel):
         encoded: EncodedQr | None,
         color: tuple[int, int, int],
         settings: QrSettings | None,
+        back_side: bool = False,
     ) -> None:
         self._encoded = encoded
         self._module_color = color
         self._settings = settings
-        self._polygons = (
-            material_polygons(settings, encoded)
-            if settings is not None and encoded is not None
-            else ()
-        )
+        self._back_side = back_side
+        if settings is not None and encoded is not None:
+            center = encoded.module_count / 2
+            # Same geometry as the board, placed the way KiCad shows the footprint.
+            self._polygons = place_polygons(
+                material_polygons(settings, encoded),
+                center,
+                center,
+                settings.rotation_degrees,
+                back_side,
+            )
+        else:
+            self._polygons = ()
         self._span_cache.clear()
         self.Refresh()
 
@@ -82,7 +94,10 @@ class QrPreview(wx.Panel):
         quiet_zone = 4
         knockout_margin = self._settings.knockout_margin_modules if self._settings.knockout else 0
         viewport_margin = max(quiet_zone, knockout_margin) + 1
-        total = self._encoded.module_count + viewport_margin * 2
+        angle = math.radians(self._settings.rotation_degrees)
+        # Rotated square extent: the viewport must fit its axis-aligned bounds.
+        spread = abs(math.cos(angle)) + abs(math.sin(angle))
+        total = (self._encoded.module_count + viewport_margin * 2) * spread
         scale = min(width, height) / total
         origin_x = (width - self._encoded.module_count * scale) / 2
         origin_y = (height - self._encoded.module_count * scale) / 2
@@ -108,10 +123,19 @@ class QrPreview(wx.Panel):
         outline_color = wx.Colour(220, 220, 220) if sum(self._background) < 384 else wx.Colour(55, 55, 55)
         dc.SetPen(wx.Pen(outline_color, 1, wx.PENSTYLE_SHORT_DASH))
         dc.SetBrush(wx.TRANSPARENT_BRUSH)
-        quiet_x = round(origin_x - quiet_zone * scale)
-        quiet_y = round(origin_y - quiet_zone * scale)
-        quiet_size = round((self._encoded.module_count + quiet_zone * 2) * scale)
-        dc.DrawRectangle(quiet_x, quiet_y, quiet_size, quiet_size)
+        count = self._encoded.module_count
+        center = count / 2
+        corners = place_polygons(
+            (((-quiet_zone, -quiet_zone), (count + quiet_zone, -quiet_zone),
+              (count + quiet_zone, count + quiet_zone), (-quiet_zone, count + quiet_zone)),),
+            center,
+            center,
+            self._settings.rotation_degrees,
+        )[0]
+        dc.DrawPolygon([
+            wx.Point(round(origin_x + x * scale), round(origin_y + y * scale))
+            for x, y in corners
+        ])
 
     @staticmethod
     def _scanline_spans(
@@ -189,6 +213,7 @@ class BetterQrDialog(wx.Dialog):
             self.layer.Append(option.name, _color_swatch(option.color))
         layer_index = next((i for i, option in enumerate(layers) if option.name == initial.layer_name), 0)
         self.layer.SetSelection(layer_index)
+        self._back_side = layers[layer_index].back_side if layers else False
         form.Add(self.layer, 1, wx.EXPAND)
 
         form.Add(wx.StaticText(self, label="Size"), 0, wx.ALIGN_CENTER_VERTICAL)
@@ -197,6 +222,10 @@ class BetterQrDialog(wx.Dialog):
         size_row.Add(self.size, 1, wx.EXPAND)
         size_row.Add(wx.StaticText(self, label=" mm"), 0, wx.ALIGN_CENTER_VERTICAL)
         form.Add(size_row, 1, wx.EXPAND)
+
+        # Orientation is not a dialog setting: KiCad owns it on the footprint
+        # (R, Move Exactly, Properties panel). Carry it through unchanged.
+        self._rotation = initial.rotation_degrees
 
         form.Add(wx.StaticText(self, label="Corner radius"), 0, wx.ALIGN_CENTER_VERTICAL)
         corner_row = wx.BoxSizer(wx.HORIZONTAL)
@@ -298,7 +327,7 @@ class BetterQrDialog(wx.Dialog):
         self.data.Bind(wx.EVT_TEXT, self._schedule_update)
         self.size.Bind(wx.EVT_TEXT, self._schedule_update)
         self.error.Bind(wx.EVT_CHOICE, self._schedule_update)
-        self.layer.Bind(wx.EVT_COMBOBOX, self._schedule_update)
+        self.layer.Bind(wx.EVT_COMBOBOX, self._on_layer_change)
         self.corner_radius.Bind(wx.EVT_SLIDER, self._on_style_change)
         self.finder_radius.Bind(wx.EVT_SLIDER, self._on_style_change)
         self.knockout.Bind(wx.EVT_CHECKBOX, self._on_style_change)
@@ -348,12 +377,14 @@ class BetterQrDialog(wx.Dialog):
             knockout_margin_modules=margin,
             finder_radius_percent=self.finder_radius.GetValue(),
             knockout_corner_radius_percent=self.knockout_corner_radius.GetValue(),
+            rotation_degrees=self._rotation,
         )
 
     def _refresh_preview(self) -> None:
         try:
             settings = self._read_settings().validated()
             encoded = encode_qr(settings)
+            layer = self._layers[max(0, self.layer.GetSelection())]
             module_size = settings.size_mm / encoded.module_count
             footprint_size = settings.size_mm
             if settings.knockout:
@@ -361,6 +392,7 @@ class BetterQrDialog(wx.Dialog):
             self.info.SetLabel(
                 f"Version {encoded.version} · {encoded.module_count}×{encoded.module_count} modules · "
                 f"{module_size:.3f} mm/module · {footprint_size:.2f} mm footprint"
+                + ("\nBack side: shown mirrored, as seen from the top." if layer.back_side else "")
             )
             self.warning_text.SetLabel(
                 "Margins below 4 modules are non-standard; verify scanning on the finished board."
@@ -370,11 +402,7 @@ class BetterQrDialog(wx.Dialog):
             self.error_text.SetLabel("")
             self._settings = settings
             self._encoded = encoded
-            self.preview.set_qr(
-                encoded,
-                self._layers[max(0, self.layer.GetSelection())].color,
-                settings,
-            )
+            self.preview.set_qr(encoded, layer.color, settings, layer.back_side)
             self.ok_button.Enable(True)
         except (QrSettingsError, RuntimeError, ValueError) as error:
             self.info.SetLabel("")
@@ -392,6 +420,15 @@ class BetterQrDialog(wx.Dialog):
         self._refresh_preview()
         if self._settings is not None:
             self.EndModal(wx.ID_OK)
+
+    def _on_layer_change(self, event) -> None:
+        # Moving between front and back is a flip: convert the angle the way
+        # KiCad's Flip does so the code keeps reading upright from its side.
+        back_side = self._layers[max(0, self.layer.GetSelection())].back_side
+        if back_side != self._back_side:
+            self._back_side = back_side
+            self._rotation = flipped_rotation(self._rotation)
+        self._schedule_update(event)
 
     def _on_style_change(self, event) -> None:
         self._update_style_controls()

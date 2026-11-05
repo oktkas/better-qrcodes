@@ -13,7 +13,10 @@ from typing import Iterator, Sequence
 from .vendor.qrcodegen import DataTooLongError, QrCode, QrSegment
 
 
-METADATA_PREFIX = "BQR1:"
+# Settings stored in a footprint field (current format).
+METADATA_PREFIX = "BQR2:"
+# Settings stored in a PCB_GROUP name by releases up to 0.1.1.
+LEGACY_METADATA_PREFIX = "BQR1:"
 ERROR_CORRECTION_LEVELS = ("L", "M", "Q", "H")
 _ECC = {
     "L": QrCode.Ecc.LOW,
@@ -38,6 +41,8 @@ class QrSettings:
     knockout_margin_modules: int = 4
     finder_radius_percent: int = 0
     knockout_corner_radius_percent: int = 0
+    # The footprint orientation, as KiCad shows it: counter-clockwise, -180..180.
+    rotation_degrees: float = 0.0
 
     def validated(self) -> "QrSettings":
         data = self.data
@@ -61,6 +66,8 @@ class QrSettings:
             raise QrSettingsError("Knockout margin must be a whole number of modules.")
         if not 0 <= self.knockout_margin_modules <= 20:
             raise QrSettingsError("Knockout margin must be between 0 and 20 modules.")
+        if not math.isfinite(self.rotation_degrees):
+            raise QrSettingsError("Rotation must be a number of degrees.")
 
         return QrSettings(
             data,
@@ -72,7 +79,51 @@ class QrSettings:
             int(self.knockout_margin_modules),
             int(self.finder_radius_percent),
             int(self.knockout_corner_radius_percent),
+            _normalize_degrees(self.rotation_degrees),
         )
+
+
+def _normalize_degrees(degrees: float) -> float:
+    angle = round(float(degrees) % 360.0, 4) % 360.0
+    return angle - 360.0 if angle > 180.0 else angle
+
+
+def flipped_rotation(degrees: float) -> float:
+    """Orientation after KiCad flips a footprint to the other side (30 -> 150).
+
+    Back-side codes default to 180, KiCad's natural orientation for a flipped
+    footprint, which reads upright when the board is viewed from below.
+    """
+    return _normalize_degrees(180.0 - degrees)
+
+
+def rotate_point(
+    x: float, y: float, center_x: float, center_y: float, degrees: float
+) -> tuple[float, float]:
+    """Rotate counter-clockwise on screen (board Y grows downward), like KiCad."""
+    angle = math.radians(degrees)
+    cos, sin = math.cos(angle), math.sin(angle)
+    dx, dy = x - center_x, y - center_y
+    return center_x + dx * cos + dy * sin, center_y - dx * sin + dy * cos
+
+
+def place_polygons(
+    polygons, center_x: float, center_y: float, degrees: float, back_side: bool = False
+):
+    """Map unrotated artwork the way a KiCad footprint shows it from the top.
+
+    A back-side footprint mirrors its local Y axis before applying its displayed
+    orientation (measured in KiCad 10.0.6).
+    """
+    if not degrees and not back_side:
+        return tuple(polygons)
+    return tuple(
+        tuple(
+            rotate_point(x, 2 * center_y - y if back_side else y, center_x, center_y, degrees)
+            for x, y in polygon
+        )
+        for polygon in polygons
+    )
 
 
 @dataclass(frozen=True)
@@ -367,12 +418,17 @@ def _corner_wedge(row: int, column: int, radius: float, corner: str):
 
 
 def encode_metadata(settings: QrSettings) -> str:
-    """Serialize editable settings into the KiCad group's persisted name."""
+    """Serialize editable settings into the QR footprint's settings field.
+
+    Position, rotation, side and layer are deliberately absent: KiCad owns them on
+    the footprint, so moving or rotating it natively can never go stale.
+    """
     settings = settings.validated()
     payload = json.dumps(
         {
             "data": settings.data,
             "ecc": settings.error_correction,
+            "size": settings.size_mm,
             "radius": settings.corner_radius_percent,
             "ko": settings.knockout,
             "margin": settings.knockout_margin_modules,
@@ -386,26 +442,40 @@ def encode_metadata(settings: QrSettings) -> str:
     return METADATA_PREFIX + packed
 
 
-def decode_metadata(group_name: str, *, size_mm: float, layer_name: str) -> QrSettings | None:
-    """Recover editable settings from a Better QR Codes group name."""
-    if not group_name.startswith(METADATA_PREFIX):
+def decode_metadata(
+    text: str,
+    *,
+    layer_name: str,
+    rotation_degrees: float = 0.0,
+    size_mm: float | None = None,
+) -> QrSettings | None:
+    """Recover editable settings from a footprint field or a legacy group name.
+
+    Legacy ``BQR1:`` group names carry no size, so the caller measures it and
+    passes ``size_mm``.
+    """
+    if text.startswith(METADATA_PREFIX):
+        packed = text[len(METADATA_PREFIX):]
+    elif text.startswith(LEGACY_METADATA_PREFIX) and size_mm is not None:
+        packed = text[len(LEGACY_METADATA_PREFIX):]
+    else:
         return None
 
     try:
-        packed = group_name[len(METADATA_PREFIX):]
         packed += "=" * (-len(packed) % 4)
         payload = zlib.decompress(base64.urlsafe_b64decode(packed)).decode("utf-8")
         values = json.loads(payload)
         return QrSettings(
             data=values["data"],
             error_correction=values["ecc"],
-            size_mm=size_mm,
+            size_mm=values["size"] if text.startswith(METADATA_PREFIX) else size_mm,
             layer_name=layer_name,
             corner_radius_percent=values.get("radius", 0),
             knockout=values.get("ko", False),
             knockout_margin_modules=values.get("margin", 4),
             finder_radius_percent=_finder_radius_from_metadata(values),
             knockout_corner_radius_percent=values.get("ko_radius", 0),
+            rotation_degrees=rotation_degrees,
         ).validated()
     except (KeyError, TypeError, ValueError, binascii.Error, zlib.error, json.JSONDecodeError):
         return None

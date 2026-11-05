@@ -46,5 +46,7 @@ The metadata inside the ZIP intentionally has no `download_*` fields. The genera
 - Rounded modules, rounded finders, knockout margins, and knockout rounding match the preview.
 - A generated code scans at default settings.
 - Selecting or double-clicking plugin artwork reopens it with the stored settings.
+- Rotating (R, Move Exactly, Properties panel) and flipping a code, then editing it, keeps its placement.
+- A code made by 0.1.x converts to a footprint on edit.
 - Updating and interactively scaling normal and knockout artwork does not corrupt it.
 - The plugin can be uninstalled cleanly through the PCM.

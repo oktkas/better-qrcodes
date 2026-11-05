@@ -1,7 +1,14 @@
-"""KiCad board integration for plugin-owned, editable QR artwork."""
+"""KiCad board integration for plugin-owned, editable QR artwork.
+
+Each QR code is a board-only footprint whose graphic children are the artwork.
+KiCad owns position, orientation and side (front/back), so they appear in the
+Properties panel and work with every native move, rotate and flip tool. The
+plugin's own settings live in a hidden footprint field.
+"""
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, replace
 
 import pcbnew
@@ -14,68 +21,113 @@ from .model import (
     decode_metadata,
     encode_metadata,
     encode_qr,
+    flipped_rotation,
 )
 
 
-# Keep newly-created SWIG wrappers alive. KiCad 10's group member iterator only
-# restores concrete Python types after a save/reload, while loaded groups work normally.
-_LIVE_ITEMS: dict[str, list] = {}
+SETTINGS_FIELD = "Better QR Codes"
+FOOTPRINT_NAME = "QR_Code"
+REFERENCE_PREFIX = "QR"
+_ATTRIBUTES = (
+    pcbnew.FP_BOARD_ONLY
+    | pcbnew.FP_EXCLUDE_FROM_BOM
+    | pcbnew.FP_EXCLUDE_FROM_POS_FILES
+)
+
 # KiCad's selection tool can retain native pointers briefly after a modal action
 # closes. Keep detached wrappers alive for the process lifetime so updating a
-# selected group never leaves the tool with a dangling C++ pointer.
+# selected QR code never leaves the tool with a dangling C++ pointer.
 _RETIRED_ITEMS: list = []
 
 
 @dataclass(frozen=True)
 class EditableQr:
-    group: object
+    item: object
     settings: QrSettings
     center: object
+    # A group made by releases up to 0.1.1; editing converts it to a footprint.
+    legacy: bool = False
 
 
 def selected_editable_qr(board) -> EditableQr | None:
-    """Find a Better QR Codes group from the current KiCad selection."""
+    """Find a Better QR Code from the current KiCad selection."""
     for selected in pcbnew.GetCurrentSelection():
         candidates = [selected]
-        try:
-            parent_group = selected.GetParentGroup()
-            if parent_group:
-                candidates.append(parent_group)
-        except (AttributeError, RuntimeError):
-            pass
+        for getter in ("GetParentFootprint", "GetParentGroup"):
+            try:
+                parent = getattr(selected, getter)()
+            except (AttributeError, RuntimeError):
+                continue
+            if parent:
+                candidates.append(parent)
 
         for candidate in candidates:
-            editable = _editable_from_group(candidate, board)
+            editable = editable_qr(candidate, board)
             if editable is not None:
                 return editable
     return None
 
 
-def _editable_from_group(candidate, board) -> EditableQr | None:
+def editable_qr(candidate, board) -> EditableQr | None:
     try:
-        if not pcbnew.PCB_GROUP.ClassOf(candidate):
-            return None
-        items = _group_items(board, candidate)
-        if not items:
-            return None
-        artwork = items[0]
-        boxes = [item.GetBoundingBox() for item in items]
-        min_x = min(box.GetLeft() for box in boxes)
-        min_y = min(box.GetTop() for box in boxes)
-        max_x = max(box.GetRight() for box in boxes)
-        max_y = max(box.GetBottom() for box in boxes)
-        geometry_size_mm = max(pcbnew.ToMM(max_x - min_x), pcbnew.ToMM(max_y - min_y))
-        layer_name = str(artwork.GetLayerName())
-        settings = decode_metadata(str(candidate.GetName()), size_mm=geometry_size_mm, layer_name=layer_name)
-        if settings is None:
-            return None
-        if settings.knockout:
-            count = encode_qr(settings).module_count
-            symbol_size_mm = geometry_size_mm * count / (count + settings.knockout_margin_modules * 2)
-            settings = replace(settings, size_mm=symbol_size_mm)
-        return EditableQr(candidate, settings, pcbnew.VECTOR2I((min_x + max_x) // 2, (min_y + max_y) // 2))
+        if pcbnew.FOOTPRINT.ClassOf(candidate):
+            return _editable_from_footprint(_concrete(candidate))
+        if pcbnew.PCB_GROUP.ClassOf(candidate):
+            return _editable_from_legacy_group(_concrete(candidate), board)
     except (AttributeError, RuntimeError, TypeError, ValueError):
+        pass
+    return None
+
+
+def _concrete(item):
+    try:
+        return item.Cast()
+    except AttributeError:
+        return item
+
+
+def _editable_from_footprint(footprint) -> EditableQr | None:
+    if not footprint.HasField(SETTINGS_FIELD):
         return None
+    shapes = list(footprint.GraphicalItems())
+    if not shapes:
+        return None
+    settings = decode_metadata(
+        str(footprint.GetFieldText(SETTINGS_FIELD)),
+        layer_name=str(shapes[0].GetLayerName()),
+        rotation_degrees=float(footprint.GetOrientationDegrees()),
+    )
+    if settings is None:
+        return None
+    return EditableQr(footprint, settings, footprint.GetPosition())
+
+
+def _editable_from_legacy_group(group, board) -> EditableQr | None:
+    items = list(group.GetItems())
+    if not items:
+        return None
+    boxes = [item.GetBoundingBox() for item in items]
+    min_x = min(box.GetLeft() for box in boxes)
+    min_y = min(box.GetTop() for box in boxes)
+    max_x = max(box.GetRight() for box in boxes)
+    max_y = max(box.GetBottom() for box in boxes)
+    geometry_size_mm = max(pcbnew.ToMM(max_x - min_x), pcbnew.ToMM(max_y - min_y))
+    settings = decode_metadata(
+        str(group.GetName()),
+        layer_name=str(items[0].GetLayerName()),
+        size_mm=geometry_size_mm,
+    )
+    if settings is None:
+        return None
+    if settings.knockout:
+        count = encode_qr(settings).module_count
+        symbol_size_mm = geometry_size_mm * count / (count + settings.knockout_margin_modules * 2)
+        settings = replace(settings, size_mm=symbol_size_mm)
+    if pcbnew.IsBackLayer(board.GetLayerID(settings.layer_name)):
+        # Converted back-side codes start upright as seen from below.
+        settings = replace(settings, rotation_degrees=flipped_rotation(0.0))
+    center = pcbnew.VECTOR2I((min_x + max_x) // 2, (min_y + max_y) // 2)
+    return EditableQr(group, settings, center, legacy=True)
 
 
 def default_position(board):
@@ -87,68 +139,90 @@ def default_position(board):
 
 
 def add_qr(board, settings: QrSettings, encoded: EncodedQr, position):
-    group = pcbnew.PCB_GROUP(board)
-    group.SetName(encode_metadata(settings))
-    board.Add(group)
-
-    artwork_items = list(_make_artwork(board, settings, encoded, position))
-    for artwork in artwork_items:
-        board.Add(artwork)
-        group.AddItem(artwork)
-    _LIVE_ITEMS[_group_key(group)] = artwork_items
-    return group
+    footprint = pcbnew.FOOTPRINT(board)
+    # An empty library nickname keeps DRC from reporting a missing library.
+    footprint.SetFPID(pcbnew.LIB_ID("", FOOTPRINT_NAME))
+    footprint.SetReference(_next_reference(board))
+    footprint.SetValue("QR Code")
+    footprint.SetLibDescription("Generated by Better QR Codes; double-click to edit")
+    footprint.SetAttributes(_ATTRIBUTES)
+    for field in (footprint.Reference(), footprint.Value()):
+        field.SetVisible(False)
+    footprint.SetPosition(position)
+    board.Add(footprint)
+    _rebuild(board, footprint, settings, encoded)
+    return footprint
 
 
 def update_qr(board, editable: EditableQr, settings: QrSettings, encoded: EncodedQr):
-    group = editable.group
-    old_items = _group_items(board, group)
     _clear_selection()
-    group.RemoveAll()
-    for item in old_items:
-        board.Remove(item)
-    _RETIRED_ITEMS.extend(old_items)
+    if editable.legacy:
+        group = editable.item
+        items = list(group.GetItems())
+        group.RemoveAll()
+        for item in items:
+            board.Remove(item)
+        board.Remove(group)
+        _RETIRED_ITEMS.extend(items)
+        _RETIRED_ITEMS.append(group)
+        return add_qr(board, settings, encoded, editable.center)
 
-    artwork_items = list(_make_artwork(board, settings, encoded, editable.center))
-    for artwork in artwork_items:
-        board.Add(artwork)
-        group.AddItem(artwork)
-    _LIVE_ITEMS[_group_key(group)] = artwork_items
-    group.SetName(encode_metadata(settings))
-    return group
-
-
-def _group_items(board, group) -> list:
-    """Return concrete member wrappers for both loaded and newly-created groups."""
-    cached = _LIVE_ITEMS.get(_group_key(group))
-    if cached is not None:
-        return list(cached)
-    return list(group.GetItems())
+    _rebuild(board, editable.item, settings, encoded)
+    return editable.item
 
 
-def _group_key(group) -> str:
-    return str(group.m_Uuid.AsString())
+def _rebuild(board, footprint, settings: QrSettings, encoded: EncodedQr) -> None:
+    """Replace the artwork, then apply the requested side and orientation.
+
+    The artwork is always built front-side at orientation 0 and then flipped by
+    KiCad, so back-side codes are mirrored exactly like any other footprint.
+    """
+    for item in list(footprint.GraphicalItems()):
+        footprint.Remove(item)
+        _RETIRED_ITEMS.append(item)
+
+    if footprint.IsFlipped():
+        footprint.Flip(footprint.GetPosition(), pcbnew.FLIP_DIRECTION_LEFT_RIGHT)
+    footprint.SetOrientationDegrees(0)
+
+    layer = board.GetLayerID(settings.layer_name)
+    back_side = bool(pcbnew.IsBackLayer(layer))
+    build_layer = board.FlipLayer(layer) if back_side else layer
+    for artwork in _make_artwork(footprint, settings, encoded, footprint.GetPosition(), build_layer):
+        footprint.Add(artwork)
+
+    if back_side:
+        footprint.Flip(footprint.GetPosition(), pcbnew.FLIP_DIRECTION_LEFT_RIGHT)
+    footprint.SetOrientationDegrees(settings.rotation_degrees)
+
+    footprint.SetField(SETTINGS_FIELD, encode_metadata(settings))
+    footprint.GetField(SETTINGS_FIELD).SetVisible(False)
 
 
-def _make_artwork(board, settings: QrSettings, encoded: EncodedQr, center):
+def _next_reference(board) -> str:
+    pattern = re.compile(rf"{REFERENCE_PREFIX}(\d+)")
+    used = [
+        int(match.group(1))
+        for footprint in board.GetFootprints()
+        if (match := pattern.fullmatch(str(footprint.GetReference())))
+    ]
+    return f"{REFERENCE_PREFIX}{max(used, default=0) + 1}"
+
+
+def _make_artwork(footprint, settings: QrSettings, encoded: EncodedQr, center, layer):
     size_iu = pcbnew.FromMM(settings.size_mm)
     count = encoded.module_count
     left = center.x - size_iu // 2
     top = center.y - size_iu // 2
-    layer = board.GetLayerID(settings.layer_name)
 
-    if settings.knockout:
+    if settings.knockout or settings.corner_radius_percent or settings.finder_radius_percent:
         for points in material_polygons(settings, encoded):
-            yield _polygon_artwork(board, points, left, top, size_iu, count, layer)
-        return
-
-    if settings.corner_radius_percent or settings.finder_radius_percent:
-        for points in material_polygons(settings, encoded):
-            yield _polygon_artwork(board, points, left, top, size_iu, count, layer)
+            yield _polygon_artwork(footprint, points, left, top, size_iu, count, layer)
         return
 
     for row, start, end in dark_runs(encoded.modules):
         yield _rectangle_artwork(
-            board,
+            footprint,
             left + round(start * size_iu / count),
             top + round(row * size_iu / count),
             left + round(end * size_iu / count),
@@ -157,8 +231,8 @@ def _make_artwork(board, settings: QrSettings, encoded: EncodedQr, center):
         )
 
 
-def _rectangle_artwork(board, x0: int, y0: int, x1: int, y1: int, layer):
-    artwork = pcbnew.PCB_SHAPE(board, pcbnew.SHAPE_T_RECT)
+def _rectangle_artwork(footprint, x0: int, y0: int, x1: int, y1: int, layer):
+    artwork = pcbnew.PCB_SHAPE(footprint, pcbnew.SHAPE_T_RECT)
     artwork.SetStart(pcbnew.VECTOR2I(x0, y0))
     artwork.SetEnd(pcbnew.VECTOR2I(x1, y1))
     artwork.SetFilled(True)
@@ -167,8 +241,8 @@ def _rectangle_artwork(board, x0: int, y0: int, x1: int, y1: int, layer):
     return artwork
 
 
-def _polygon_artwork(board, points, left: int, top: int, size_iu: int, count: int, layer):
-    artwork = pcbnew.PCB_SHAPE(board, pcbnew.SHAPE_T_POLY)
+def _polygon_artwork(footprint, points, left: int, top: int, size_iu: int, count: int, layer):
+    artwork = pcbnew.PCB_SHAPE(footprint, pcbnew.SHAPE_T_POLY)
     artwork.SetPolyPoints([
         pcbnew.VECTOR2I(
             left + round(x * size_iu / count),
@@ -182,9 +256,9 @@ def _polygon_artwork(board, points, left: int, top: int, size_iu: int, count: in
     return artwork
 
 
-def select_group(group) -> None:
+def select_item(item) -> None:
     _clear_selection()
-    group.SetSelected()
+    item.SetSelected()
     pcbnew.Refresh()
 
 

@@ -43,6 +43,8 @@ def material_polygons(
             (point.x / _MODULE_UNITS, point.y / _MODULE_UNITS)
             for point in points
         ))
+    # Unrotated: on the board the footprint orientation applies rotation, and the
+    # preview applies the same transform with model.place_polygons().
     return tuple(polygons)
 
 

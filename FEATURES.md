@@ -48,6 +48,8 @@ The four-module quiet-zone boundary is implemented in the preview. Size modes an
 - Always show the quiet-zone boundary in the preview, using a dashed outline that is not included in the generated board geometry.
 - Clearly distinguish the quiet zone from the optional knockout margin.
 
+Placement is implemented through a board-only footprint: KiCad owns position, any-angle orientation and front/back side, which show in the Properties panel. The plugin dialog has no orientation setting; rotate with KiCad's tools.
+
 ## 6. Error correction
 
 - Support automatic selection and levels L, M, Q, and H.
