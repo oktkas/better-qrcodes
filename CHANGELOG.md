@@ -1,9 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.0] - 2026-11-05
 
 - Codes are now board-only footprints, so position, orientation and side show in KiCad's Properties panel and work with R, Move Exactly and Flip at any angle.
 - Back-side layers place the code flipped and upright as seen from below (orientation 180°); switching sides in the dialog converts the orientation like KiCad's Flip.
+- New codes are attached to the cursor after Add to Board when the KiCad API server is enabled.
 - Codes made by 0.1.x are converted to footprints the first time they are edited.
 
 ## [0.1.1] - 2026-10-25
