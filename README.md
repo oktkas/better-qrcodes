@@ -2,6 +2,14 @@
 
 Better QR Codes is a KiCad plugin for creating more flexible, visually refined QR codes on PCB designs.
 
+The same board with KiCad's built-in QR code and with Better QR Codes (rounded modules and finders, a thin knockout with rounded corners):
+
+| KiCad native | Better QR Codes |
+| --- | --- |
+| ![The RISCy Remote board with KiCad's native square QR code](docs/images/kicad-native.png) | ![The RISCy Remote board with a rounded Better QR Codes knockout](docs/images/better-qr-codes.png) |
+
+![The Add Better QR Code dialog with content, error correction, layer, size, rounding and knockout settings](docs/images/dialog.png)
+
 Improvements over KiCad's native QR-code generator include:
 
 - Relative rounded corners that preserve connected modules
