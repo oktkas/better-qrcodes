@@ -27,6 +27,7 @@ These features may go beyond the original QR-code specification, but are widely 
 - Toolbar action in KiCad's PCB Editor
 - Each code is a board-only footprint (`QR1`, `QR2`, …): position, orientation and side are in KiCad's Properties panel and work with R, Move Exactly and Flip
 - Re-editing by double-clicking a code or opening the plugin with it selected; native moves, rotations and flips are kept
+- After **Add to Board** the new code is attached to the cursor, like placing a footprint (needs **Preferences → Plugins → Enable KiCad API**; otherwise it is placed at the board center)
 - Codes made by 0.1.x (groups) are converted to footprints the first time they are edited
 
 ## Install

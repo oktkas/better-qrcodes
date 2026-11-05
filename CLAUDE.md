@@ -19,6 +19,8 @@ The first implementation targets KiCad 10 as a Python Action Plugin. Each QR cod
 
 The dialog reads the active KiCad PCB color theme for layer swatches and uses a fixed dark preview background for reliable contrast. Board output and preview must both use `geometry.material_polygons()` so they cannot disagree; the preview places it with `model.place_polygons()`, which mirrors KiCad's footprint transform (a test compares the two). A global wx event filter routes canvas double-clicks on plugin-owned footprints (and legacy groups) to the editor instead of KiCad's footprint dialog, because custom `PCB_GENERATOR` items are not exposed by KiCad's Python API.
 
+Picking a new code up with the cursor uses the IPC API's `InteractiveMoveItems` through `better_qr_codes/ipc.py`, a dependency-free NNG/protobuf client (the SWIG API cannot start tools, and a PCM package cannot install `kicad-python`'s compiled `pynng`). It must run off KiCad's main thread, which answers API requests.
+
 Complex knockout results must be fractured into simple, hole-free `PCB_SHAPE` polygons before insertion. KiCad's interactive scale tool can corrupt a complex polygon's hole contours.
 
 Updating artwork detaches old items and retains their wrappers for the KiCad process lifetime. Do not eagerly delete them: KiCad's selection tool can briefly retain native pointers after the modal dialog closes, causing access violations if those objects are destroyed.
